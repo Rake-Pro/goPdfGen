@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,9 +45,35 @@ func build(seed int64, pages int, pad int) *gofpdf.Fpdf {
 	}
 	for i := 0; i < pages; i++ {
 		pdf.AddPage()
+		if sig != "" && sigOnPage(i+1, pages) {
+			// single Cell keeps the signature as one contiguous string in the content stream
+			pdf.Cell(0, 5, sig)
+			pdf.Ln(5)
+		}
 		pdf.MultiCell(0, 5, randomText(rng, pageChars), "", "L", false)
 	}
 	return pdf
+}
+
+var (
+	sig     string // searchable signature text, "" = none
+	sigPage string // first | last | all | <page number>
+)
+
+func sigOnPage(page, pages int) bool {
+	switch sigPage {
+	case "first":
+		return page == 1
+	case "last":
+		return page == pages
+	case "all":
+		return true
+	}
+	n, err := strconv.Atoi(sigPage)
+	if err != nil || n < 1 {
+		log.Fatalf("invalid -sig-page: %q (first|last|all|<n>)", sigPage)
+	}
+	return page == n
 }
 
 type countWriter struct{ n int64 }
@@ -65,6 +92,8 @@ func main() {
 	sizeMB := flag.Int("size", 5, "target size in MB")
 	outFile := flag.String("out", "out.pdf", "output path")
 	seed := flag.Int64("seed", 0, "random seed (0 = time-based)")
+	flag.StringVar(&sig, "signature", "", "searchable signature text to embed in page content (empty = none)")
+	flag.StringVar(&sigPage, "sig-page", "last", "where to place the signature: first|last|all|<page number>")
 	flag.Parse()
 	if *sizeMB <= 0 {
 		log.Fatalf("invalid -size: %d", *sizeMB)
